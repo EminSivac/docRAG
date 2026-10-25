@@ -10,7 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.ListenLocalhost(appConfig.ServerPort);
+    options.ListenAnyIP(appConfig.ServerPort);
 });
 
 builder.Services.AddSingleton(appConfig);

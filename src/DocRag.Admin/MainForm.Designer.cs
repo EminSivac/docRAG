@@ -46,7 +46,8 @@ partial class MainForm
         statusPanel.Controls.Add(serverStatusLabel);
         statusPanel.Controls.Add(ingestStatusLabel);
         statusPanel.Dock = DockStyle.Top;
-        statusPanel.Height = 40;
+        statusPanel.Height = 64;
+        statusPanel.SetFlowBreak(serverStatusLabel, true);
         statusPanel.Name = "statusPanel";
         statusPanel.Padding = new Padding(10);
 

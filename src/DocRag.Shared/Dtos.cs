@@ -3,12 +3,20 @@ namespace DocRag.Shared;
 public sealed class ChatRequest
 {
     public string Question { get; set; } = "";
+
+    /// <summary>Deep research: several search queries, more sources, multi-step answer. Slower but more thorough.</summary>
+    public bool Deep { get; set; }
 }
 
 public sealed class ChatResponse
 {
     public string Answer { get; set; } = "";
     public List<SourceCitation> Sources { get; set; } = new();
+    public bool Deep { get; set; }
+
+    /// <summary>Search queries used (deep research only).</summary>
+    public List<string> Queries { get; set; } = new();
+    public double ElapsedSeconds { get; set; }
 }
 
 public sealed class SourceCitation

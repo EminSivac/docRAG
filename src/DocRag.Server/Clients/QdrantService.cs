@@ -11,6 +11,8 @@ public sealed class QdrantChunkPoint
     public required string FileName { get; init; }
     public required string Location { get; init; }
     public required string Text { get; init; }
+    public required int SectionId { get; init; }
+    public required int ChunkIndex { get; init; }
 }
 
 public sealed class QdrantSearchResult
@@ -20,6 +22,9 @@ public sealed class QdrantSearchResult
     public required string FileName { get; init; }
     public required string Location { get; init; }
     public required string Text { get; init; }
+    /// <summary>-1 for chunks indexed before section ids existed.</summary>
+    public int SectionId { get; init; } = -1;
+    public int ChunkIndex { get; init; }
 }
 
 public sealed class QdrantService
@@ -65,6 +70,8 @@ public sealed class QdrantService
             point.Payload.Add("file_name", p.FileName);
             point.Payload.Add("location", p.Location);
             point.Payload.Add("text", p.Text);
+            point.Payload.Add("section_id", (long)p.SectionId);
+            point.Payload.Add("chunk_index", (long)p.ChunkIndex);
             return point;
         }).ToList();
 
@@ -113,13 +120,36 @@ public sealed class QdrantService
             payloadSelector: true,
             cancellationToken: ct);
 
-        return results.Select(r => new QdrantSearchResult
-        {
-            Score = r.Score,
-            FilePath = r.Payload.TryGetValue("file_path", out var fp) ? fp.StringValue : "",
-            FileName = r.Payload.TryGetValue("file_name", out var fn) ? fn.StringValue : "",
-            Location = r.Payload.TryGetValue("location", out var loc) ? loc.StringValue : "",
-            Text = r.Payload.TryGetValue("text", out var text) ? text.StringValue : ""
-        }).ToList();
+        return results.Select(r => ToResult(r.Score, r.Payload)).ToList();
     }
+
+    /// <summary>All chunks of one section of a file, in document order.</summary>
+    public async Task<List<QdrantSearchResult>> GetSectionChunksAsync(string filePath, int sectionId, CancellationToken ct = default)
+    {
+        var filter = new Filter
+        {
+            Must =
+            {
+                new Condition { Field = new FieldCondition { Key = "file_path", Match = new Match { Keyword = filePath } } },
+                new Condition { Field = new FieldCondition { Key = "section_id", Match = new Match { Integer = sectionId } } }
+            }
+        };
+
+        var response = await _client.ScrollAsync(_collectionName, filter, limit: 256, payloadSelector: true, cancellationToken: ct);
+        return response.Result
+            .Select(r => ToResult(0, r.Payload))
+            .OrderBy(r => r.ChunkIndex)
+            .ToList();
+    }
+
+    private static QdrantSearchResult ToResult(float score, Google.Protobuf.Collections.MapField<string, Value> payload) => new()
+    {
+        Score = score,
+        FilePath = payload.TryGetValue("file_path", out var fp) ? fp.StringValue : "",
+        FileName = payload.TryGetValue("file_name", out var fn) ? fn.StringValue : "",
+        Location = payload.TryGetValue("location", out var loc) ? loc.StringValue : "",
+        Text = payload.TryGetValue("text", out var text) ? text.StringValue : "",
+        SectionId = payload.TryGetValue("section_id", out var sid) ? (int)sid.IntegerValue : -1,
+        ChunkIndex = payload.TryGetValue("chunk_index", out var ci) ? (int)ci.IntegerValue : 0
+    };
 }

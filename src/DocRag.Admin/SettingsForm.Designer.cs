@@ -29,9 +29,9 @@ partial class SettingsForm
         lmStudioUrlLabel = new Label();
         lmStudioUrlTextBox = new TextBox();
         embeddingModelLabel = new Label();
-        embeddingModelTextBox = new TextBox();
+        embeddingModelComboBox = new ComboBox();
         chatModelLabel = new Label();
-        chatModelTextBox = new TextBox();
+        chatModelComboBox = new ComboBox();
 
         serverPortLabel = new Label();
         serverPortNumeric = new NumericUpDown();
@@ -46,6 +46,21 @@ partial class SettingsForm
         chunkOverlapNumeric = new NumericUpDown();
         topKLabel = new Label();
         topKNumeric = new NumericUpDown();
+        batchSizeLabel = new Label();
+        batchSizeNumeric = new NumericUpDown();
+        parallelismLabel = new Label();
+        parallelismNumeric = new NumericUpDown();
+        optimizePanel = new FlowLayoutPanel();
+        optimizeButton = new Button();
+        optimizeStatusLabel = new Label();
+
+        contextTokensLabel = new Label();
+        contextTokensNumeric = new NumericUpDown();
+        maxContextCharsLabel = new Label();
+        maxContextCharsNumeric = new NumericUpDown();
+        contextPanel = new FlowLayoutPanel();
+        contextButton = new Button();
+        contextStatusLabel = new Label();
 
         qdrantExePathLabel = new Label();
         qdrantExePathPanel = new Panel();
@@ -77,10 +92,25 @@ partial class SettingsForm
         layout.Name = "layout";
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var i = 0; i < 12; i++)
-        {
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        }
+        layout.RowCount = 18;
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         // rootsLabel
         rootsLabel.AutoSize = true;
@@ -123,21 +153,23 @@ partial class SettingsForm
         lmStudioUrlTextBox.Dock = DockStyle.Fill;
         layout.Controls.Add(lmStudioUrlTextBox, 1, 1);
 
-        // embeddingModelLabel / embeddingModelTextBox
+        // embeddingModelLabel / embeddingModelComboBox
         embeddingModelLabel.AutoSize = true;
         embeddingModelLabel.Anchor = AnchorStyles.Left;
         embeddingModelLabel.Text = "Embedding-Modell";
         layout.Controls.Add(embeddingModelLabel, 0, 2);
-        embeddingModelTextBox.Dock = DockStyle.Fill;
-        layout.Controls.Add(embeddingModelTextBox, 1, 2);
+        embeddingModelComboBox.Dock = DockStyle.Fill;
+        embeddingModelComboBox.DropDownStyle = ComboBoxStyle.DropDown;
+        layout.Controls.Add(embeddingModelComboBox, 1, 2);
 
-        // chatModelLabel / chatModelTextBox
+        // chatModelLabel / chatModelComboBox
         chatModelLabel.AutoSize = true;
         chatModelLabel.Anchor = AnchorStyles.Left;
         chatModelLabel.Text = "Chat-Modell";
         layout.Controls.Add(chatModelLabel, 0, 3);
-        chatModelTextBox.Dock = DockStyle.Fill;
-        layout.Controls.Add(chatModelTextBox, 1, 3);
+        chatModelComboBox.Dock = DockStyle.Fill;
+        chatModelComboBox.DropDownStyle = ComboBoxStyle.DropDown;
+        layout.Controls.Add(chatModelComboBox, 1, 3);
 
         // serverPortLabel / serverPortNumeric
         serverPortLabel.AutoSize = true;
@@ -199,16 +231,86 @@ partial class SettingsForm
         topKNumeric.Width = 120;
         layout.Controls.Add(topKNumeric, 1, 9);
 
+        // batchSizeLabel / batchSizeNumeric
+        batchSizeLabel.AutoSize = true;
+        batchSizeLabel.Anchor = AnchorStyles.Left;
+        batchSizeLabel.Text = "Embedding-Batchgröße";
+        layout.Controls.Add(batchSizeLabel, 0, 10);
+        batchSizeNumeric.Minimum = 1;
+        batchSizeNumeric.Maximum = 512;
+        batchSizeNumeric.Width = 120;
+        layout.Controls.Add(batchSizeNumeric, 1, 10);
+
+        // parallelismLabel / parallelismNumeric
+        parallelismLabel.AutoSize = true;
+        parallelismLabel.Anchor = AnchorStyles.Left;
+        parallelismLabel.Text = "Parallele Anfragen";
+        layout.Controls.Add(parallelismLabel, 0, 11);
+        parallelismNumeric.Minimum = 1;
+        parallelismNumeric.Maximum = 32;
+        parallelismNumeric.Width = 120;
+        layout.Controls.Add(parallelismNumeric, 1, 11);
+
+        // optimizeButton / optimizeStatusLabel
+        optimizePanel.Dock = DockStyle.Fill;
+        optimizePanel.AutoSize = true;
+        optimizePanel.FlowDirection = FlowDirection.TopDown;
+        optimizePanel.WrapContents = false;
+        optimizePanel.Controls.Add(optimizeButton);
+        optimizePanel.Controls.Add(optimizeStatusLabel);
+        layout.Controls.Add(optimizePanel, 1, 12);
+        optimizeButton.AutoSize = true;
+        optimizeButton.Text = "Optimale Einstellungen ermitteln";
+        optimizeButton.Click += OptimizeButton_Click;
+        optimizeStatusLabel.AutoSize = true;
+        optimizeStatusLabel.MaximumSize = new System.Drawing.Size(400, 0);
+
+        // contextTokensLabel / contextTokensNumeric
+        contextTokensLabel.AutoSize = true;
+        contextTokensLabel.Anchor = AnchorStyles.Left;
+        contextTokensLabel.Text = "Chat-Kontext (Token, 0 = auto)";
+        layout.Controls.Add(contextTokensLabel, 0, 13);
+        contextTokensNumeric.Minimum = 0;
+        contextTokensNumeric.Maximum = 2000000;
+        contextTokensNumeric.Increment = 1024;
+        contextTokensNumeric.Width = 120;
+        layout.Controls.Add(contextTokensNumeric, 1, 13);
+
+        // maxContextCharsLabel / maxContextCharsNumeric
+        maxContextCharsLabel.AutoSize = true;
+        maxContextCharsLabel.Anchor = AnchorStyles.Left;
+        maxContextCharsLabel.Text = "Max. Auszüge (Zeichen)";
+        layout.Controls.Add(maxContextCharsLabel, 0, 14);
+        maxContextCharsNumeric.Minimum = 1000;
+        maxContextCharsNumeric.Maximum = 4000000;
+        maxContextCharsNumeric.Increment = 1000;
+        maxContextCharsNumeric.Width = 120;
+        layout.Controls.Add(maxContextCharsNumeric, 1, 14);
+
+        // contextButton / contextStatusLabel
+        contextPanel.Dock = DockStyle.Fill;
+        contextPanel.AutoSize = true;
+        contextPanel.FlowDirection = FlowDirection.TopDown;
+        contextPanel.WrapContents = false;
+        contextPanel.Controls.Add(contextButton);
+        contextPanel.Controls.Add(contextStatusLabel);
+        layout.Controls.Add(contextPanel, 1, 15);
+        contextButton.AutoSize = true;
+        contextButton.Text = "Optimalen Kontext ermitteln";
+        contextButton.Click += ContextButton_Click;
+        contextStatusLabel.AutoSize = true;
+        contextStatusLabel.MaximumSize = new System.Drawing.Size(400, 0);
+
         // qdrantExePathLabel / qdrantExePathPanel
         qdrantExePathLabel.AutoSize = true;
         qdrantExePathLabel.Anchor = AnchorStyles.Left;
         qdrantExePathLabel.Text = "qdrant.exe Pfad (optional)";
-        layout.Controls.Add(qdrantExePathLabel, 0, 10);
+        layout.Controls.Add(qdrantExePathLabel, 0, 16);
         qdrantExePathPanel.Dock = DockStyle.Fill;
         qdrantExePathPanel.Height = 30;
         qdrantExePathPanel.Controls.Add(qdrantExePathTextBox);
         qdrantExePathPanel.Controls.Add(qdrantExePathBrowseButton);
-        layout.Controls.Add(qdrantExePathPanel, 1, 10);
+        layout.Controls.Add(qdrantExePathPanel, 1, 16);
         qdrantExePathTextBox.Width = 320;
         qdrantExePathBrowseButton.Left = 326;
         qdrantExePathBrowseButton.Width = 30;
@@ -219,12 +321,12 @@ partial class SettingsForm
         serverExePathLabel.AutoSize = true;
         serverExePathLabel.Anchor = AnchorStyles.Left;
         serverExePathLabel.Text = "DocRag.Server.exe Pfad (optional)";
-        layout.Controls.Add(serverExePathLabel, 0, 11);
+        layout.Controls.Add(serverExePathLabel, 0, 17);
         serverExePathPanel.Dock = DockStyle.Fill;
         serverExePathPanel.Height = 30;
         serverExePathPanel.Controls.Add(serverExePathTextBox);
         serverExePathPanel.Controls.Add(serverExePathBrowseButton);
-        layout.Controls.Add(serverExePathPanel, 1, 11);
+        layout.Controls.Add(serverExePathPanel, 1, 17);
         serverExePathTextBox.Width = 320;
         serverExePathBrowseButton.Left = 326;
         serverExePathBrowseButton.Width = 30;
@@ -252,7 +354,7 @@ partial class SettingsForm
         // SettingsForm
         AcceptButton = okButton;
         CancelButton = cancelButton;
-        ClientSize = new System.Drawing.Size(620, 640);
+        ClientSize = new System.Drawing.Size(620, 860);
         Controls.Add(layout);
         Controls.Add(buttonPanel);
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -285,9 +387,9 @@ partial class SettingsForm
     private Label lmStudioUrlLabel;
     private TextBox lmStudioUrlTextBox;
     private Label embeddingModelLabel;
-    private TextBox embeddingModelTextBox;
+    private ComboBox embeddingModelComboBox;
     private Label chatModelLabel;
-    private TextBox chatModelTextBox;
+    private ComboBox chatModelComboBox;
 
     private Label serverPortLabel;
     private NumericUpDown serverPortNumeric;
@@ -302,6 +404,21 @@ partial class SettingsForm
     private NumericUpDown chunkOverlapNumeric;
     private Label topKLabel;
     private NumericUpDown topKNumeric;
+    private Label batchSizeLabel;
+    private NumericUpDown batchSizeNumeric;
+    private Label parallelismLabel;
+    private NumericUpDown parallelismNumeric;
+    private FlowLayoutPanel optimizePanel;
+    private Button optimizeButton;
+    private Label optimizeStatusLabel;
+
+    private Label contextTokensLabel;
+    private NumericUpDown contextTokensNumeric;
+    private Label maxContextCharsLabel;
+    private NumericUpDown maxContextCharsNumeric;
+    private FlowLayoutPanel contextPanel;
+    private Button contextButton;
+    private Label contextStatusLabel;
 
     private Label qdrantExePathLabel;
     private Panel qdrantExePathPanel;

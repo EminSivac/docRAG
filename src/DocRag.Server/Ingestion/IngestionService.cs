@@ -18,6 +18,10 @@ public sealed class IngestionService
 
     private readonly SemaphoreSlim _runLock = new(1, 1);
     private IngestStatus _status = new();
+    private readonly object _statusLock = new();
+    private readonly SemaphoreSlim _ensureLock = new(1, 1);
+    private volatile bool _collectionEnsured;
+    private SemaphoreSlim _embedGate = new(1, 1);
 
     public IngestionService(
         AppConfig config,
@@ -85,33 +89,56 @@ public sealed class IngestionService
 
             foreach (var filePath in files)
             {
-                ct.ThrowIfCancellationRequested();
                 seenPaths.Add(filePath);
-                _status.CurrentFile = filePath;
-
-                try
-                {
-                    var wasProcessed = await ProcessFileAsync(filePath, ct);
-                    if (wasProcessed)
-                    {
-                        _status.ProcessedFiles++;
-                    }
-                    else
-                    {
-                        _status.SkippedFiles++;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _status.FailedFiles++;
-                    _status.RecentErrors.Add($"{filePath}: {ex.Message}");
-                    if (_status.RecentErrors.Count > 50)
-                    {
-                        _status.RecentErrors.RemoveAt(0);
-                    }
-                    _logger.LogError(ex, "Fehler beim Verarbeiten von {File}", filePath);
-                }
             }
+
+            _collectionEnsured = false;
+            var parallelism = Math.Max(1, _config.EmbeddingMaxParallelism);
+            _embedGate = new SemaphoreSlim(parallelism, parallelism);
+
+            // Files run in parallel so parsing/hashing/Qdrant writes of one file overlap with
+            // embedding requests of another. The shared _embedGate caps the total number of
+            // in-flight embedding requests to EmbeddingMaxParallelism across all files.
+            await Parallel.ForEachAsync(
+                files,
+                new ParallelOptions { MaxDegreeOfParallelism = parallelism, CancellationToken = ct },
+                async (filePath, token) =>
+                {
+                    _status.CurrentFile = filePath;
+
+                    try
+                    {
+                        var wasProcessed = await ProcessFileAsync(filePath, token);
+                        lock (_statusLock)
+                        {
+                            if (wasProcessed)
+                            {
+                                _status.ProcessedFiles++;
+                            }
+                            else
+                            {
+                                _status.SkippedFiles++;
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        lock (_statusLock)
+                        {
+                            _status.FailedFiles++;
+                            _status.RecentErrors.Add($"{filePath}: {ex.Message}");
+                            if (_status.RecentErrors.Count > 50)
+                            {
+                                _status.RecentErrors.RemoveAt(0);
+                            }
+                        }
+                        _logger.LogError(ex, "Fehler beim Verarbeiten von {File}", filePath);
+                    }
+                });
 
             // Remove documents that were deleted from disk since the last run
             foreach (var trackedPath in _manifest.GetAllTrackedPaths(_config.EmbeddingModel))
@@ -183,44 +210,86 @@ public sealed class IngestionService
         var fileName = Path.GetFileName(filePath);
         var chunkCount = 0;
 
-        foreach (var batch in Batch(chunks, _config.EmbeddingBatchSize))
-        {
-            var texts = batch.Select(c => c.Text).ToList();
-            var embeddings = await _lmStudio.GetEmbeddingsAsync(texts, ct);
+        // Batches of one file are embedded and upserted concurrently; _embedGate limits
+        // how many embedding requests hit LM Studio at the same time.
+        var batchTasks = chunks
+            .Chunk(Math.Max(1, _config.EmbeddingBatchSize))
+            .Select(batch => ProcessBatchAsync(batch, filePath, fileName, ct))
+            .ToList();
 
-            var points = new List<QdrantChunkPoint>();
-            for (var i = 0; i < batch.Count; i++)
-            {
-                points.Add(new QdrantChunkPoint
-                {
-                    Id = Guid.NewGuid(),
-                    Vector = embeddings[i],
-                    FilePath = filePath,
-                    FileName = fileName,
-                    Location = batch[i].Location,
-                    Text = batch[i].Text
-                });
-            }
-
-            if (points.Count > 0)
-            {
-                await _qdrant.EnsureCollectionAsync((ulong)points[0].Vector.Length, ct);
-            }
-
-            await _qdrant.UpsertAsync(points, ct);
-            chunkCount += points.Count;
-        }
+        var counts = await Task.WhenAll(batchTasks);
+        chunkCount = counts.Sum();
 
         _manifest.Upsert(filePath, _config.EmbeddingModel, contentHash, lastModifiedUtc, chunkCount);
-        _status.TotalChunksIndexed += chunkCount;
+        lock (_statusLock)
+        {
+            _status.TotalChunksIndexed += chunkCount;
+        }
         return true;
     }
 
-    private static IEnumerable<List<TextChunk>> Batch(List<TextChunk> source, int batchSize)
+    private async Task<int> ProcessBatchAsync(TextChunk[] batch, string filePath, string fileName, CancellationToken ct)
     {
-        for (var i = 0; i < source.Count; i += batchSize)
+        var texts = batch.Select(c => c.Text).ToList();
+
+        List<float[]> embeddings;
+        var gate = _embedGate;
+        await gate.WaitAsync(ct);
+        try
         {
-            yield return source.Skip(i).Take(batchSize).ToList();
+            embeddings = await _lmStudio.GetEmbeddingsAsync(texts, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
+
+        var points = new List<QdrantChunkPoint>(batch.Length);
+        for (var i = 0; i < batch.Length; i++)
+        {
+            points.Add(new QdrantChunkPoint
+            {
+                Id = Guid.NewGuid(),
+                Vector = embeddings[i],
+                FilePath = filePath,
+                FileName = fileName,
+                Location = batch[i].Location,
+                Text = batch[i].Text,
+                SectionId = batch[i].SectionId,
+                ChunkIndex = batch[i].ChunkIndex
+            });
+        }
+
+        if (points.Count > 0)
+        {
+            await EnsureCollectionOnceAsync((ulong)points[0].Vector.Length, ct);
+        }
+
+        await _qdrant.UpsertAsync(points, ct);
+        return points.Count;
+    }
+
+    private async Task EnsureCollectionOnceAsync(ulong vectorSize, CancellationToken ct)
+    {
+        if (_collectionEnsured)
+        {
+            return;
+        }
+
+        await _ensureLock.WaitAsync(ct);
+        try
+        {
+            if (_collectionEnsured)
+            {
+                return;
+            }
+
+            await _qdrant.EnsureCollectionAsync(vectorSize, ct);
+            _collectionEnsured = true;
+        }
+        finally
+        {
+            _ensureLock.Release();
         }
     }
 

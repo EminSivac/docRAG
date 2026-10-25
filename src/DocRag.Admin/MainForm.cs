@@ -8,6 +8,7 @@ public partial class MainForm : Form
     private readonly ProcessManager _processManager = new();
     private readonly HttpClient _http = new();
     private AppConfig _config;
+    private Task<bool>? _buildTask;
 
     public MainForm()
     {
@@ -37,7 +38,7 @@ public partial class MainForm : Form
 
     private void StartButton_Click(object? sender, EventArgs e) => StartAll();
 
-    private void StopButton_Click(object? sender, EventArgs e) => _processManager.StopAll();
+    private void StopButton_Click(object? sender, EventArgs e) => _processManager.StopAll(_config);
 
     private async void ReindexButton_Click(object? sender, EventArgs e) => await TriggerReindexAsync();
 
@@ -49,8 +50,15 @@ public partial class MainForm : Form
 
     private async void StatusTimer_Tick(object? sender, EventArgs e) => await RefreshStatusAsync();
 
-    private void StartAll()
+    protected override void OnShown(EventArgs e)
     {
+        base.OnShown(e);
+        _buildTask = _processManager.BuildServerAsync();
+    }
+
+    private async void StartAll()
+    {
+        if (_buildTask is not null) await _buildTask;
         _config = ConfigStore.Load();
         _processManager.StartQdrant(_config);
         _processManager.StartServer(_config);
@@ -149,14 +157,13 @@ public partial class MainForm : Form
 
             ingestStatusLabel.Text = status switch
             {
-                { IsRunning: true } =>
-                    $"Indexierung läuft: {status.ProcessedFiles + status.SkippedFiles + status.FailedFiles}/{status.TotalFiles} " +
-                    $"geprüft ({status.ProcessedFiles} verarbeitet, {status.SkippedFiles} übersprungen, {status.FailedFiles} Fehler)",
+                { IsRunning: true } => FormatRunningStatus(status),
                 { StartedAt: null } =>
                     "Indexierung: noch nie gelaufen",
                 _ =>
                     $"Indexierung fertig: {status.ProcessedFiles} verarbeitet, {status.SkippedFiles} übersprungen, " +
-                    $"{status.FailedFiles} Fehler (von {status.TotalFiles} Dateien), {status.TotalChunksIndexed} Chunks gesamt"
+                    $"{status.FailedFiles} Fehler (von {status.TotalFiles} Dateien), {status.TotalChunksIndexed} Chunks gesamt" +
+                    FormatDuration(status)
             };
         }
         catch
@@ -164,6 +171,43 @@ public partial class MainForm : Form
             ingestStatusLabel.Text = "Indexierung: Server nicht erreichbar";
         }
     }
+
+    private static string FormatRunningStatus(IngestStatus status)
+    {
+        var done = status.ProcessedFiles + status.SkippedFiles + status.FailedFiles;
+        var text = $"Indexierung läuft: {done}/{status.TotalFiles} geprüft " +
+                   $"({status.ProcessedFiles} verarbeitet, {status.SkippedFiles} übersprungen, {status.FailedFiles} Fehler)";
+
+        if (status.StartedAt is not { } started)
+        {
+            return text;
+        }
+
+        var elapsed = DateTime.UtcNow - started;
+        if (elapsed.TotalSeconds < 2 || done == 0)
+        {
+            return text + " – berechne Geschwindigkeit …";
+        }
+
+        var filesPerSec = done / elapsed.TotalSeconds;
+        var chunksPerSec = status.TotalChunksIndexed / elapsed.TotalSeconds;
+        var remaining = Math.Max(0, status.TotalFiles - done);
+        var eta = TimeSpan.FromSeconds(remaining / filesPerSec);
+
+        return text +
+               $" | {filesPerSec:0.0} Dateien/s, {chunksPerSec:0.0} Chunks/s" +
+               $" | vergangen {FormatSpan(elapsed)}, noch ca. {FormatSpan(eta)}";
+    }
+
+    private static string FormatDuration(IngestStatus status) =>
+        status is { StartedAt: { } started, FinishedAt: { } finished }
+            ? $" | Dauer {FormatSpan(finished - started)}"
+            : "";
+
+    private static string FormatSpan(TimeSpan span) =>
+        span.TotalHours >= 1 ? $"{(int)span.TotalHours}h {span.Minutes:00}min"
+        : span.TotalMinutes >= 1 ? $"{span.Minutes}min {span.Seconds:00}s"
+        : $"{Math.Max(1, (int)span.TotalSeconds)}s";
 
     private void OnLogReceived(string source, string line) => AppendLog(source, line);
 
@@ -190,7 +234,7 @@ public partial class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         statusTimer.Stop();
-        _processManager.StopAll();
+        _processManager.StopAll(_config);
         trayIcon.Visible = false;
         base.OnFormClosing(e);
     }

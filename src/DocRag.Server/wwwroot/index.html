@@ -3,38 +3,49 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light dark" />
 <title>docRAG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Schibsted+Grotesk:wght@400;500;600&display=swap" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
-    <header>
-      <h1>docRAG</h1>
-      <p class="subtitle">Frage stellen &mdash; Antworten kommen mit Quellenangaben aus den lokalen Dokumenten</p>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="docRAG, neue Sitzung">docRAG</a>
+      <div class="topbar-right">
+        <div id="index-status" class="index-status" role="status" aria-live="polite" title="Zustand des Dokumentenindex">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="index-status-text">Index wird geprüft …</span>
+        </div>
+        <button type="button" id="clear-history" class="text-button hidden">Verlauf leeren</button>
+      </div>
     </header>
 
-    <main>
-      <form id="chat-form">
-        <textarea id="question" placeholder="Deine Frage..." rows="3" required></textarea>
-        <button type="submit" id="ask-button">Fragen</button>
-      </form>
-
-      <div id="result" class="hidden">
-        <section class="answer">
-          <h2>Antwort</h2>
-          <p id="answer-text"></p>
-        </section>
-
-        <section class="sources">
-          <h2>Quellen</h2>
-          <div id="sources-list"></div>
-        </section>
-      </div>
-
-      <div id="error" class="hidden error"></div>
+    <main id="thread" class="thread" aria-live="polite">
+      <section id="empty" class="empty">
+        <h1>Was willst du in deinen Dokumenten nachschlagen?</h1>
+        <p>Stell eine Frage in ganzen Sätzen. Jede Antwort zeigt dir, aus welchen Dateien und Stellen sie stammt, damit du sie prüfen kannst.</p>
+      </section>
     </main>
+
+    <div class="composer-wrap">
+      <form id="chat-form" class="composer" autocomplete="off">
+        <label for="question" class="sr-only">Deine Frage</label>
+        <textarea id="question" rows="1" maxlength="4000" placeholder="Frage stellen …" required></textarea>
+        <button type="submit" id="ask-button" class="primary">Fragen</button>
+        <button type="button" id="stop-button" class="secondary hidden">Abbrechen</button>
+      </form>
+      <label class="mode-toggle" for="deep-toggle" title="Mehrere Suchanfragen, mehr Dokumentstellen, mehrstufige Auswertung">
+        <input type="checkbox" id="deep-toggle" />
+        <span><b>Deep Research</b> – gründlicher, die Antwort dauert deutlich länger</span>
+      </label>
+      <p class="hint"><kbd>Enter</kbd> sendet, <kbd>Shift</kbd> + <kbd>Enter</kbd> macht einen Zeilenumbruch.</p>
+    </div>
   </div>
 
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="app.js"></script>
 </body>
 </html>

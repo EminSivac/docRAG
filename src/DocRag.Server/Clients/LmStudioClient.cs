@@ -39,7 +39,8 @@ public sealed class LmStudioClient
             .ToList();
     }
 
-    public async Task<string> GetChatCompletionAsync(string systemPrompt, string userPrompt, CancellationToken ct = default)
+    public async Task<string> GetChatCompletionAsync(
+        string systemPrompt, string userPrompt, CancellationToken ct = default, int? maxTokens = null, double temperature = 0.2)
     {
         var requestBody = new ChatCompletionRequest
         {
@@ -49,7 +50,8 @@ public sealed class LmStudioClient
                 new ChatMessage { Role = "system", Content = systemPrompt },
                 new ChatMessage { Role = "user", Content = userPrompt }
             },
-            Temperature = 0.2
+            Temperature = temperature,
+            MaxTokens = maxTokens
         };
 
         using var response = await _http.PostAsJsonAsync("v1/chat/completions", requestBody, ct);
@@ -83,6 +85,10 @@ public sealed class LmStudioClient
         [JsonPropertyName("model")] public string Model { get; set; } = "";
         [JsonPropertyName("messages")] public ChatMessage[] Messages { get; set; } = Array.Empty<ChatMessage>();
         [JsonPropertyName("temperature")] public double Temperature { get; set; }
+
+        [JsonPropertyName("max_tokens")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? MaxTokens { get; set; }
     }
 
     private sealed class ChatMessage

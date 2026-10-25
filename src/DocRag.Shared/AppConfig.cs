@@ -32,6 +32,16 @@ public sealed class AppConfig
 
     public int RetrievalTopK { get; set; } = 6;
 
+    /// <summary>
+    /// Context window (tokens) the chat model is loaded with in LM Studio. 0 = detect at runtime from LM Studio.
+    /// The server clamps the context budget to what fits into this window, so a too large
+    /// <see cref="RetrievalMaxContextChars"/> can't overflow the model.
+    /// </summary>
+    public int ChatContextTokens { get; set; } = 0;
+
+    /// <summary>Character budget for the context sent to the chat model; hits are expanded to whole sections up to this size.</summary>
+    public int RetrievalMaxContextChars { get; set; } = 12000;
+
     public static readonly string[] SupportedExtensions =
     {
         ".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".md"

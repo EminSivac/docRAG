@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DocRag.Admin/DocRag.Admin.csproj" />
+    <Project Path="src/DocRag.Server/DocRag.Server.csproj" />
+    <Project Path="src/DocRag.Shared/DocRag.Shared.csproj" />
+  </Folder>
+</Solution>

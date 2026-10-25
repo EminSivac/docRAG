@@ -1,0 +1,6 @@
+bin/
+obj/
+.vs/
+*.user
+tools/qdrant/*
+!tools/qdrant/.gitkeep
